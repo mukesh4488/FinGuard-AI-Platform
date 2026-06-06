@@ -29,7 +29,7 @@ function App() {
   const [allLoans, setAllLoans] = useState([]);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
 
-  const API_BASE_URL = 'http://localhost:5000/api/financials';
+  const API_BASE_URL = 'https://finguard-api-gateway.onrender.com';
 
   // Fetch data for the Analytics tab from MongoDB
   const fetchAnalyticsData = async () => {

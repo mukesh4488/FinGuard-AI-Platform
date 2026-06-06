@@ -4,8 +4,8 @@ const axios = require('axios');
 const Transaction = require('../models/Transaction');
 const Loan = require('../models/Loan');
 
-// The URL where our Python ML service is running
-const PYTHON_ML_URL = 'http://127.0.0.1:8000';
+// The LIVE URL where our Python ML service is running
+const PYTHON_ML_URL = 'https://finguard-ai-platform.onrender.com';
 
 // ==========================================
 // POST ROUTES (Saving New Data)

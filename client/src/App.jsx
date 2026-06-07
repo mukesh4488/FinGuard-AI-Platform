@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { ShieldAlert, Landmark, Activity, Sun, Moon, Home, TerminalSquare, Database } from 'lucide-react';
 
-const API_BASE_URL = 'https://finguard-api-gateway.onrender.com';
+const API_BASE_URL = 'https://finguard-api-gateway.onrender.com/api/financials';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');

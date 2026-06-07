@@ -1,10 +1,22 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pickle
 import numpy as np
 import os
 
 app = FastAPI(title="FinGuard Enterprise AI Engine")
+
+# =====================================================================
+# CORS SECURITY BLOCK (Added to allow frontend communication)
+# =====================================================================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Define global placeholders for models and scalers
 fraud_model = None

@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-function App() {
-  // Navigation State: transactions, loans, or analytics
-  const [activeTab, setActiveTab] = useState('transactions');
+// Update this to point to your live API Gateway URL
+const API_BASE_URL = 'https://finguard-api-gateway.onrender.com';
 
-  // Transaction Form State
+export default function App() {
+  // Navigation State
+  const [activeTab, setActiveTab] = useState('fraud');
+
+  // Transaction Form State (Aligned with our new advanced ML model features)
   const [txForm, setTxForm] = useState({
-    userId: 'USER_1029',
+    userId: 'USER-8842',
     amount: '',
-    location: 'Mumbai, India',
-    merchantType: 'Online'
+    location: '0',      // 0: Local, 1: Domestic Out-of-State, 2: High-Risk International
+    merchantType: '0',  // 0: Grocery, 1: Retail, 2: Electronics, 3: Crypto/Gambling
+    hour: new Date().getHours().toString()
   });
-  const [txResult, setTxResult] = useState(null);
 
   // Loan Form State
   const [loanForm, setLoanForm] = useState({
@@ -22,310 +25,324 @@ function App() {
     loanAmount: '',
     debtToIncomeRatio: ''
   });
+
+  // Response & History States
+  const [txResult, setTxResult] = useState(null);
   const [loanResult, setLoanResult] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [loans, setLoans] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // Analytics State (Fetched from Database)
-  const [allTransactions, setAllTransactions] = useState([]);
-  const [allLoans, setAllLoans] = useState([]);
-  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  // Fetch log history on mount
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
-  const API_BASE_URL = 'https://finguard-api-gateway.onrender.com';
-
-  // Fetch data for the Analytics tab from MongoDB
-  const fetchAnalyticsData = async () => {
-    setIsLoadingAnalytics(true);
+  const fetchHistory = async () => {
     try {
       const txRes = await axios.get(`${API_BASE_URL}/transactions`);
       const loanRes = await axios.get(`${API_BASE_URL}/loans`);
-      setAllTransactions(txRes.data.data || []);
-      setAllLoans(loanRes.data.data || []);
-    } catch (error) {
-      console.error("Error fetching analytics metrics:", error);
-    } finally {
-      setIsLoadingAnalytics(false);
+      if (txRes.data?.data) setTransactions(txRes.data.data);
+      if (loanRes.data?.data) setLoans(loanRes.data.data);
+    } catch (err) {
+      console.error("Error retrieving historical cloud logs:", err);
     }
   };
 
-  // Trigger data fetch whenever the user switches to the Analytics tab
-  useEffect(() => {
-    if (activeTab === 'analytics') {
-      fetchAnalyticsData();
-    }
-  }, [activeTab]);
-
-  // Handle Transaction Submission
+  // Submit Credit Card Transaction to AI Engine via Gateway
   const handleTransactionSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setTxResult(null);
     try {
-      const response = await axios.post(`${API_BASE_URL}/transaction`, {
+      const payload = {
         userId: txForm.userId,
         amount: parseFloat(txForm.amount),
-        location: txForm.location,
-        merchantType: txForm.merchantType
-      });
-      setTxResult(response.data.data);
-      // Reset input form amount after success
-      setTxForm({ ...txForm, amount: '' });
-    } catch (error) {
-      alert('Error connecting to backend gateway');
+        location: parseInt(txForm.location),
+        merchantType: parseInt(txForm.merchantType),
+        hour: parseInt(txForm.hour)
+      };
+      
+      const res = await axios.post(`${API_BASE_URL}/transaction`, payload);
+      setTxResult(res.data.data);
+      fetchHistory(); // Refresh table view
+    } catch (err) {
+      alert("API Gateway Communication Timeout or Failure.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Handle Loan Submission
+  // Submit Loan Application to AI Engine via Gateway
   const handleLoanSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setLoanResult(null);
     try {
-      const response = await axios.post(`${API_BASE_URL}/loan`, {
+      const payload = {
         applicantName: loanForm.applicantName,
         annualIncome: parseFloat(loanForm.annualIncome),
         creditScore: parseFloat(loanForm.creditScore),
         loanAmount: parseFloat(loanForm.loanAmount),
         debtToIncomeRatio: parseFloat(loanForm.debtToIncomeRatio)
-      });
-      setLoanResult(response.data.data);
-      // Reset loan form input fields after success
-      setLoanForm({ applicantName: '', annualIncome: '', creditScore: '', loanAmount: '', debtToIncomeRatio: '' });
-    } catch (error) {
-      alert('Error connecting to backend gateway');
+      };
+
+      const res = await axios.post(`${API_BASE_URL}/loan`, payload);
+      setLoanResult(res.data.data);
+      fetchHistory(); // Refresh table view
+    } catch (err) {
+      alert("API Gateway Communication Timeout or Failure.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Compute Aggregates for the Analytics Dashboard
-  const totalTxCount = allTransactions.length;
-  const flaggedTxCount = allTransactions.filter(t => t.isFlagged).length;
-  const fraudRate = totalTxCount > 0 ? (flaggedTxCount / totalTxCount) * 100 : 0;
-
-  const totalLoanCount = allLoans.length;
-  const approvedLoans = allLoans.filter(l => l.status === 'Approved').length;
-  const rejectedLoans = allLoans.filter(l => l.status === 'Rejected').length;
-  const pendingLoans = allLoans.filter(l => l.status === 'Pending Review').length;
-  const loanApprovalRate = totalLoanCount > 0 ? (approvedLoans / totalLoanCount) * 100 : 0;
-
   return (
-    <div style={{ fontFamily: 'Segoe UI, sans-serif', padding: '30px', backgroundColor: '#f4f6f9', minHeight: '100vh' }}>
-      <header style={{ borderBottom: '2px solid #ddd', paddingBottom: '15px', marginBottom: '30px' }}>
-        <h1 style={{ color: '#1e293b', margin: 0 }}>FinGuard AI Platform</h1>
-        <p style={{ color: '#64748b', margin: '5px 0 0 0' }}>Enterprise Risk Analytics & Fraud Detection Workspace</p>
+    <div style={{ backgroundColor: '#0f172a', color: '#f8fafc', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+      
+      {/* HEADER NAVBAR */}
+      <header style={{ borderBottom: '1px solid #334155', padding: '20px 40px', display: 'flex', justifyContent: 'between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold', color: '#38bdf8', letterSpacing: '1px' }}>
+            🥽 FINGUARD AI PLATFORM
+          </h1>
+          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#94a3b8' }}>
+            Enterprise Microservices Architecture • Live Production Command Center
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={() => setActiveTab('fraud')} 
+            style={{ padding: '10px 20px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: activeTab === 'fraud' ? '#0284c7' : '#1e293b', color: '#fff' }}>
+            💳 Fraud Terminal
+          </button>
+          <button 
+            onClick={() => setActiveTab('loan')} 
+            style={{ padding: '10px 20px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: activeTab === 'loan' ? '#0284c7' : '#1e293b', color: '#fff' }}>
+            🏦 Underwriting Suite
+          </button>
+          <button 
+            onClick={() => setActiveTab('analytics')} 
+            style={{ padding: '10px 20px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: activeTab === 'analytics' ? '#0284c7' : '#1e293b', color: '#fff' }}>
+            📊 Cloud Auditing Logs
+          </button>
+        </div>
       </header>
 
-      {/* Navigation Tabs */}
-      <div style={{ marginBottom: '25px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-        <button 
-          onClick={() => setActiveTab('transactions')}
-          style={{
-            padding: '12px 20px', fontSize: '15px', fontWeight: '600', cursor: 'pointer',
-            backgroundColor: activeTab === 'transactions' ? '#2563eb' : '#e2e8f0',
-            color: activeTab === 'transactions' ? '#fff' : '#334155', border: 'none', borderRadius: '6px'
-          }}
-        >
-          💳 Credit Card Fraud Terminal
-        </button>
-        <button 
-          onClick={() => setActiveTab('loans')}
-          style={{
-            padding: '12px 20px', fontSize: '15px', fontWeight: '600', cursor: 'pointer',
-            backgroundColor: activeTab === 'loans' ? '#2563eb' : '#e2e8f0',
-            color: activeTab === 'loans' ? '#fff' : '#334155', border: 'none', borderRadius: '6px'
-          }}
-        >
-          📊 Credit Risk Evaluation
-        </button>
-        <button 
-          onClick={() => setActiveTab('analytics')}
-          style={{
-            padding: '12px 20px', fontSize: '15px', fontWeight: '600', cursor: 'pointer',
-            backgroundColor: activeTab === 'analytics' ? '#0f172a' : '#e2e8f0',
-            color: activeTab === 'analytics' ? '#fff' : '#334155', border: 'none', borderRadius: '6px'
-          }}
-        >
-          📈 Executive Risk Analytics
-        </button>
+      {/* SYSTEM META INFRASTRUCTURE METRICS */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', padding: '20px 40px' }}>
+        <div style={{ backgroundColor: '#1e293b', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #38bdf8' }}>
+          <div style={{ fontSize: '12px', color: '#94a3b8' }}>GATEWAY INFRASTRUCTURE</div>
+          <div style={{ fontSize: '16px', fontWeight: 'bold', marginTop: '5px', color: '#22c55e' }}>● Operational [Node.js Engine]</div>
+        </div>
+        <div style={{ backgroundColor: '#1e293b', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #a855f7' }}>
+          <div style={{ fontSize: '12px', color: '#94a3b8' }}>PREDICTIVE AI ENGINE</div>
+          <div style={{ fontSize: '16px', fontWeight: 'bold', marginTop: '5px', color: '#22c55e' }}>● Active [Random Forest Classifier]</div>
+        </div>
+        <div style={{ backgroundColor: '#1e293b', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #eab308' }}>
+          <div style={{ fontSize: '12px', color: '#94a3b8' }}>DATABASE PERSISTENCE</div>
+          <div style={{ fontSize: '16px', fontWeight: 'bold', marginTop: '5px', color: '#eab308' }}>MongoDB Atlas Cluster</div>
+        </div>
+        <div style={{ backgroundColor: '#1e293b', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #f43f5e' }}>
+          <div style={{ fontSize: '12px', color: '#94a3b8' }}>TOTAL PROCESSED LOGS</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', marginTop: '5px' }}>{transactions.length + loans.length} Actions</div>
+        </div>
       </div>
 
-      {/* 1. Transaction View */}
-      {activeTab === 'transactions' && (
-        <div style={{ background: '#fff', padding: '25px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <h2>Simulate Real-Time Transaction</h2>
-          <form onSubmit={handleTransactionSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', maxWidth: '400px' }}>
-            <label style={{ fontWeight: '500' }}>Amount (INR):
-              <input type="number" required placeholder="e.g. 15000" style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc' }} value={txForm.amount} onChange={e => setTxForm({...txForm, amount: e.target.value})} />
-            </label>
-            <label style={{ fontWeight: '500' }}>Merchant Type:
-              <select style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc' }} value={txForm.merchantType} onChange={e => setTxForm({...txForm, merchantType: e.target.value})}>
-                <option value="Online">Online / E-Commerce</option>
-                <option value="Retail">In-Store Retail</option>
-                <option value="Food">Dining & Food</option>
-              </select>
-            </label>
-            <button type="submit" style={{ padding: '12px', backgroundColor: '#10b981', color: 'white', fontWeight: 'bold', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Process Transaction</button>
-          </form>
-
-          {txResult && (
-            <div style={{ marginTop: '25px', padding: '15px', borderRadius: '5px', backgroundColor: txResult.isFlagged ? '#fee2e2' : '#dcfce7', border: `1px solid ${txResult.isFlagged ? '#ef4444' : '#22c55e'}` }}>
-              <h3>AI Assessment Verdict:</h3>
-              <p><strong>Fraud Probability Score:</strong> {(txResult.fraudScore * 100).toFixed(0)}%</p>
-              <p><strong>Security Status:</strong> {txResult.isFlagged ? '❌ FLAGGED AS FRAUD / SUSPICIOUS ANOMALY' : '✅ SECURE TRANSACTION'}</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 2. Loan View */}
-      {activeTab === 'loans' && (
-        <div style={{ background: '#fff', padding: '25px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <h2>Evaluate New Loan Application</h2>
-          <form onSubmit={handleLoanSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', maxWidth: '400px' }}>
-            <label style={{ fontWeight: '500' }}>Applicant Full Name:
-              <input type="text" required placeholder="e.g. John Doe" style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc' }} value={loanForm.applicantName} onChange={e => setLoanForm({...loanForm, applicantName: e.target.value})} />
-            </label>
-            <label style={{ fontWeight: '500' }}>Annual Income (INR):
-              <input type="number" required placeholder="e.g. 800000" style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc' }} value={loanForm.annualIncome} onChange={e => setLoanForm({...loanForm, annualIncome: e.target.value})} />
-            </label>
-            <label style={{ fontWeight: '500' }}>Credit Score (CIBIL):
-              <input type="number" required placeholder="300 - 900" style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc' }} value={loanForm.creditScore} onChange={e => setLoanForm({...loanForm, creditScore: e.target.value})} />
-            </label>
-            <label style={{ fontWeight: '500' }}>Requested Loan Amount:
-              <input type="number" required placeholder="e.g. 250000" style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc' }} value={loanForm.loanAmount} onChange={e => setLoanForm({...loanForm, loanAmount: e.target.value})} />
-            </label>
-            <label style={{ fontWeight: '500' }}>Debt-to-Income Ratio (0.0 to 1.0):
-              <input type="number" step="0.01" required placeholder="e.g. 0.35" style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc' }} value={loanForm.debtToIncomeRatio} onChange={e => setLoanForm({...loanForm, debtToIncomeRatio: e.target.value})} />
-            </label>
-            <button type="submit" style={{ padding: '12px', backgroundColor: '#2563eb', color: 'white', fontWeight: 'bold', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Analyze Underwriting Risk</button>
-          </form>
-
-          {loanResult && (
-            <div style={{ 
-              marginTop: '25px', padding: '15px', borderRadius: '5px', 
-              backgroundColor: loanResult.status === 'Approved' ? '#dcfce7' : loanResult.status === 'Rejected' ? '#fee2e2' : '#fef9c3',
-              border: `1px solid ${loanResult.status === 'Approved' ? '#22c55e' : loanResult.status === 'Rejected' ? '#ef4444' : '#eab308'}`
-            }}>
-              <h3>Risk Underwriting Assessment:</h3>
-              <p><strong>Calculated Risk Coefficient:</strong> {(loanResult.riskScore * 100).toFixed(0)}%</p>
-              <p><strong>System Status:</strong> <strong>{loanResult.status.toUpperCase()}</strong></p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 3. Executive Analytics View */}
-      {activeTab === 'analytics' && (
-        <div style={{ background: '#fff', padding: '25px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h2>System-Wide Risk Intelligence</h2>
-            <button onClick={fetchAnalyticsData} style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#64748b', color: 'white', border: 'none', borderRadius: '4px' }}>
-              🔄 Refresh Logs
-            </button>
+      <main style={{ padding: '20px 40px' }}>
+        {loading && (
+          <div style={{ backgroundColor: '#0284c7', color: '#fff', padding: '12px', borderRadius: '6px', marginBottom: '20px', fontWeight: 'bold', textAlign: 'center' }}>
+            ⏳ Syncing distributed pipeline states... Fetching neural risk configurations...
           </div>
+        )}
 
-          {isLoadingAnalytics ? (
-            <p>Loading historical records from MongoDB server...</p>
-          ) : (
-            <div>
-              {/* Metric Card Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '40px' }}>
-                <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '6px', borderLeft: '4px solid #3b82f6' }}>
-                  <span style={{ fontSize: '14px', color: '#64748b', fontWeight: '600' }}>TOTAL TRANSACTIONS</span>
-                  <h3 style={{ margin: '10px 0 0 0', fontSize: '28px', color: '#1e293b' }}>{totalTxCount}</h3>
-                </div>
-                <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '6px', borderLeft: `4px solid ${fraudRate > 0 ? '#ef4444' : '#10b981'}` }}>
-                  <span style={{ fontSize: '14px', color: '#64748b', fontWeight: '600' }}>FRAUD INTERCEPTION RATE</span>
-                  <h3 style={{ margin: '10px 0 0 0', fontSize: '28px', color: '#ef4444' }}>{fraudRate.toFixed(1)}%</h3>
-                  <div style={{ width: '100%', backgroundColor: '#e2e8f0', height: '6px', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
-                    <div style={{ width: `${fraudRate}%`, backgroundColor: '#ef4444', height: '100%' }}></div>
+        {/* TAB 1: FRAUD ANALYSIS DETECTOR */}
+        {activeTab === 'fraud' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+            <div style={{ backgroundColor: '#1e293b', padding: '30px', borderRadius: '12px', border: '1px solid #334155' }}>
+              <h2 style={{ marginTop: 0, color: '#38bdf8' }}>Transaction Risk Profiler</h2>
+              <p style={{ color: '#94a3b8', fontSize: '14px' }}>Feed transaction attributes to the live model to evaluate mathematical anomaly thresholds.</p>
+              
+              <form onSubmit={handleTransactionSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
+                <label>
+                  <span style={{ display: 'block', fontSize: '14px', marginBottom: '5px' }}>Transaction Volume (USD)</span>
+                  <input type="number" required placeholder="e.g. 750" value={txForm.amount} onChange={e => setTxForm({...txForm, amount: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #475569', backgroundColor: '#0f172a', color: '#fff' }} />
+                </label>
+
+                <label>
+                  <span style={{ display: 'block', fontSize: '14px', marginBottom: '5px' }}>Geographic Velocity Vector</span>
+                  <select value={txForm.location} onChange={e => setTxForm({...txForm, location: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #475569', backgroundColor: '#0f172a', color: '#fff' }}>
+                    <option value="0">Local Area (Standard Customer Radius)</option>
+                    <option value="1">Domestic Out-of-State (High Velocity Shift)</option>
+                    <option value="2">High-Risk International Node</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span style={{ display: 'block', fontSize: '14px', marginBottom: '5px' }}>Merchant Registry Risk Level</span>
+                  <select value={txForm.merchantType} onChange={e => setTxForm({...txForm, merchantType: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #475569', backgroundColor: '#0f172a', color: '#fff' }}>
+                    <option value="0">Wholesale Groceries / Utilities (Low Risk)</option>
+                    <option value="1">Standard Retail / Standard Apparel (Medium Risk)</option>
+                    <option value="2">Online Electronics Retailers (Elevated Risk)</option>
+                    <option value="3">Offshore Crypto Exchanges / Gambling Nodes (Severe Risk)</option>
+                  </select>
+                </label>
+
+                <button type="submit" style={{ padding: '12px', marginTop: '10px', borderRadius: '6px', border: 'none', backgroundColor: '#38bdf8', color: '#0f172a', fontWeight: 'bold', cursor: 'pointer', fontSize: '16px' }}>
+                  Execute ML Risk Diagnosis
+                </button>
+              </form>
+            </div>
+
+            {/* FRAUD OUTPUT SCREEN */}
+            <div style={{ backgroundColor: '#0f172a', padding: '30px', borderRadius: '12px', border: '2px dashed #334155', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              {txResult ? (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '48px', fontWeight: 'bold', color: txResult.isFlagged ? '#f43f5e' : '#22c55e' }}>
+                    {(txResult.fraudScore * 100).toFixed(2)}%
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Statistical Fraud Probability</div>
+                  
+                  <div style={{ marginTop: '30px', padding: '15px', borderRadius: '8px', backgroundColor: txResult.isFlagged ? 'rgba(244,63,94,0.1)' : 'rgba(34,197,94,0.1)', border: txResult.isFlagged ? '1px solid #f43f5e' : '1px solid #22c55e', color: txResult.isFlagged ? '#f43f5e' : '#22c55e', fontWeight: 'bold', fontSize: '20px' }}>
+                    {txResult.isFlagged ? '🚨 TRANSACTION INTERCEPTED & FLAGGED' : '✅ TRANSACTION SECURELY APPROVED'}
+                  </div>
+
+                  <div style={{ marginTop: '30px', textAlign: 'left', backgroundColor: '#1e293b', padding: '15px', borderRadius: '6px', fontSize: '12px', fontFamily: 'monospace' }}>
+                    <strong>System Vector Metadata:</strong>
+                    <pre style={{ margin: '5px 0 0 0' }}>{JSON.stringify(txResult, null, 2)}</pre>
                   </div>
                 </div>
-                <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '6px', borderLeft: '4px solid #8b5cf6' }}>
-                  <span style={{ fontSize: '14px', color: '#64748b', fontWeight: '600' }}>LOAN APPLICATIONS</span>
-                  <h3 style={{ margin: '10px 0 0 0', fontSize: '28px', color: '#1e293b' }}>{totalLoanCount}</h3>
+              ) : (
+                <div style={{ textAlign: 'center', color: '#64748b' }}>
+                  <div style={{ fontSize: '40px' }}>⚡</div>
+                  <p>Awaiting transaction stream inputs...</p>
                 </div>
-                <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '6px', borderLeft: '4px solid #10b981' }}>
-                  <span style={{ fontSize: '14px', color: '#64748b', fontWeight: '600' }}>AI APPROVAL RATE</span>
-                  <h3 style={{ margin: '10px 0 0 0', fontSize: '28px', color: '#10b981' }}>{loanApprovalRate.toFixed(1)}%</h3>
-                  <div style={{ width: '100%', backgroundColor: '#e2e8f0', height: '6px', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
-                    <div style={{ width: `${loanApprovalRate}%`, backgroundColor: '#10b981', height: '100%' }}></div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: CREDIT UNDERWRITING SUITE */}
+        {activeTab === 'loan' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+            <div style={{ backgroundColor: '#1e293b', padding: '30px', borderRadius: '12px', border: '1px solid #334155' }}>
+              <h2 style={{ marginTop: 0, color: '#a855f7' }}>Risk Underwriting Console</h2>
+              <p style={{ color: '#94a3b8', fontSize: '14px' }}>Processes structural client indices to isolate capital risk exposure scales.</p>
+              
+              <form onSubmit={handleLoanSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
+                <input type="text" required placeholder="Applicant Full Name" value={loanForm.applicantName} onChange={e => setLoanForm({...loanForm, applicantName: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', backgroundColor: '#0f172a', color: '#fff' }} />
+                <input type="number" required placeholder="Annual Income (USD)" value={loanForm.annualIncome} onChange={e => setLoanForm({...loanForm, annualIncome: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', backgroundColor: '#0f172a', color: '#fff' }} />
+                <input type="number" required placeholder="Credit Score (300 - 850)" value={loanForm.creditScore} onChange={e => setLoanForm({...loanForm, creditScore: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', backgroundColor: '#0f172a', color: '#fff' }} />
+                <input type="number" required placeholder="Requested Loan Face Value (USD)" value={loanForm.loanAmount} onChange={e => setLoanForm({...loanForm, loanAmount: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', backgroundColor: '#0f172a', color: '#fff' }} />
+                <input type="number" step="0.01" required placeholder="Debt-to-Income Ratio (0.01 - 1.00)" value={loanForm.debtToIncomeRatio} onChange={e => setLoanForm({...loanForm, debtToIncomeRatio: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', backgroundColor: '#0f172a', color: '#fff' }} />
+
+                <button type="submit" style={{ padding: '12px', marginTop: '10px', borderRadius: '6px', border: 'none', backgroundColor: '#a855f7', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '16px' }}>
+                  Evaluate Underwriting Strategy
+                </button>
+              </form>
+            </div>
+
+            {/* LOAN OUTPUT SCREEN */}
+            <div style={{ backgroundColor: '#0f172a', padding: '30px', borderRadius: '12px', border: '2px dashed #334155', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              {loanResult ? (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '48px', fontWeight: 'bold', color: loanResult.status === 'Rejected' ? '#f43f5e' : '#22c55e' }}>
+                    {(loanResult.riskScore * 100).toFixed(2)}%
                   </div>
+                  <div style={{ fontSize: '14px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Portfolio Default Risk Index</div>
+                  
+                  <div style={{ marginTop: '30px', padding: '15px', borderRadius: '8px', backgroundColor: loanResult.status === 'Rejected' ? 'rgba(244,63,94,0.1)' : 'rgba(34,197,94,0.1)', border: loanResult.status === 'Rejected' ? '1px solid #f43f5e' : '1px solid #22c55e', color: loanResult.status === 'Rejected' ? '#f43f5e' : '#22c55e', fontWeight: 'bold', fontSize: '20px' }}>
+                    {loanResult.status === 'Rejected' ? '❌ APPLICATION RISK OUTSIDE PARAMETERS' : '✅ FUNDING CAPABILITY APPROVED'}
+                  </div>
+
+                  <div style={{ marginTop: '30px', textAlign: 'left', backgroundColor: '#1e293b', padding: '15px', borderRadius: '6px', fontSize: '12px', fontFamily: 'monospace' }}>
+                    <strong>Pipeline Serialization:</strong>
+                    <pre style={{ margin: '5px 0 0 0' }}>{JSON.stringify(loanResult, null, 2)}</pre>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', color: '#64748b' }}>
+                  <div style={{ fontSize: '40px' }}>🏛️</div>
+                  <p>Awaiting structural credit metrics...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: REAL-TIME AUDITING LOG TABLES */}
+        {activeTab === 'analytics' && (
+          <div style={{ backgroundColor: '#1e293b', padding: '30px', borderRadius: '12px', border: '1px solid #334155' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, color: '#eab308' }}>Central Ledger Audit Logs</h2>
+              <button onClick={fetchHistory} style={{ padding: '8px 16px', backgroundColor: '#475569', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                🔄 Synchronize Ledger
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+              {/* TRANSACTION HISTORY */}
+              <div>
+                <h3 style={{ borderBottom: '2px solid #334155', paddingBottom: '8px', color: '#38bdf8' }}>Transaction Pipeline Logs</h3>
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {transactions.length === 0 ? <p style={{ color: '#64748b', fontSize: '14px' }}>No records persisted.</p> : (
+                    <table style={{ width: '100%', textAligh: 'left', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ color: '#94a3b8', borderBottom: '1px solid #334155' }}>
+                          <th style={{ padding: '8px' }}>Amount</th>
+                          <th style={{ padding: '8px' }}>Risk Score</th>
+                          <th style={{ padding: '8px' }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {transactions.map((t, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid #1e293b' }}>
+                            <td style={{ padding: '8px', fontWeight: 'bold' }}>${t.amount}</td>
+                            <td style={{ padding: '8px', fontFamily: 'monospace' }}>{(t.fraudScore * 100).toFixed(1)}%</td>
+                            <td style={{ padding: '8px', color: t.isFlagged ? '#f43f5e' : '#22c55e', fontWeight: 'bold' }}>
+                              {t.isFlagged ? 'FLAGGED' : 'PASSED'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
 
-              {/* Data Tables Section */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '30px' }}>
-                {/* Recent Transactions */}
-                <div>
-                  <h3 style={{ borderBottom: '2px solid #f1f5f9', paddingBottom: '8px' }}>Recent Fraud Logs (MongoDB)</h3>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+              {/* LOAN APPS HISTORY */}
+              <div>
+                <h3 style={{ borderBottom: '2px solid #334155', paddingBottom: '8px', color: '#a855f7' }}>Underwriting Credit Logs</h3>
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {loans.length === 0 ? <p style={{ color: '#64748b', fontSize: '14px' }}>No records persisted.</p> : (
+                    <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '13px' }}>
                       <thead>
-                        <tr style={{ backgroundColor: '#f1f5f9' }}>
-                          <th style={{ padding: '10px' }}>User ID</th>
-                          <th style={{ padding: '10px' }}>Amount</th>
-                          <th style={{ padding: '10px' }}>Channel</th>
-                          <th style={{ padding: '10px' }}>AI Risk Score</th>
-                          <th style={{ padding: '10px' }}>Verdict</th>
+                        <tr style={{ color: '#94a3b8', borderBottom: '1px solid #334155' }}>
+                          <th style={{ padding: '8px' }}>Applicant</th>
+                          <th style={{ padding: '8px' }}>Loan Value</th>
+                          <th style={{ padding: '8px' }}>Status</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {allTransactions.length === 0 ? (
-                          <tr><td colSpan="5" style={{ padding: '15px', color: '#94a3b8' }}>No transactions recorded yet. Submit one in the terminal!</td></tr>
-                        ) : (
-                          allTransactions.map((tx, idx) => (
-                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <td style={{ padding: '10px' }}>{tx.userId}</td>
-                              <td style={{ padding: '10px' }}>₹{tx.amount.toLocaleString('en-IN')}</td>
-                              <td style={{ padding: '10px' }}>{tx.merchantType}</td>
-                              <td style={{ padding: '10px' }}>{(tx.fraudScore * 100).toFixed(0)}%</td>
-                              <td style={{ padding: '10px', color: tx.isFlagged ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
-                                {tx.isFlagged ? '❌ FLAGGED' : '✅ SECURE'}
-                              </td>
-                            </tr>
-                          ))
-                        )}
+                        {loans.map((l, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid #1e293b' }}>
+                            <td style={{ padding: '8px' }}>{l.applicantName}</td>
+                            <td style={{ padding: '8px', fontWeight: 'bold' }}>${l.loanAmount}</td>
+                            <td style={{ padding: '8px', color: l.status === 'Rejected' ? '#f43f5e' : '#22c55e', fontWeight: 'bold' }}>
+                              {l.status.toUpperCase()}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
-                  </div>
-                </div>
-
-                {/* Recent Loan Evaluations */}
-                <div style={{ marginTop: '20px' }}>
-                  <h3 style={{ borderBottom: '2px solid #f1f5f9', paddingBottom: '8px' }}>Recent Underwriting Logs (MongoDB)</h3>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#f1f5f9' }}>
-                          <th style={{ padding: '10px' }}>Applicant</th>
-                          <th style={{ padding: '10px' }}>Loan Requested</th>
-                          <th style={{ padding: '10px' }}>CIBIL</th>
-                          <th style={{ padding: '10px' }}>Risk Coefficient</th>
-                          <th style={{ padding: '10px' }}>Decision</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {allLoans.length === 0 ? (
-                          <tr><td colSpan="5" style={{ padding: '15px', color: '#94a3b8' }}>No applications evaluated yet. Submit one in the terminal!</td></tr>
-                        ) : (
-                          allLoans.map((loan, idx) => (
-                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <td style={{ padding: '10px' }}>{loan.applicantName}</td>
-                              <td style={{ padding: '10px' }}>₹{loan.loanAmount.toLocaleString('en-IN')}</td>
-                              <td style={{ padding: '10px' }}>{loan.creditScore}</td>
-                              <td style={{ padding: '10px' }}>{(loan.riskScore * 100).toFixed(0)}%</td>
-                              <td style={{ padding: '10px', fontWeight: 'bold', color: loan.status === 'Approved' ? '#10b981' : loan.status === 'Rejected' ? '#ef4444' : '#eab308' }}>
-                                {loan.status.toUpperCase()}
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  )}
                 </div>
               </div>
 
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </main>
     </div>
   );
 }
-
-export default App;

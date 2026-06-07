@@ -14,12 +14,15 @@ const PYTHON_ML_URL = 'https://finguard-ai-platform.onrender.com';
 // 1. Route to handle a new credit card transaction
 router.post('/transaction', async (req, res) => {
     try {
-        const { userId, amount, location, merchantType } = req.body;
+        // ADDED 'hour' to the incoming request body
+        const { userId, amount, location, merchantType, hour } = req.body;
 
+        // Passed 'hour' to the Python Machine Learning Engine
         const mlResponse = await axios.post(`${PYTHON_ML_URL}/predict-transaction`, {
             amount,
             location,
-            merchantType
+            merchantType,
+            hour 
         });
 
         const { fraudScore, isFlagged } = mlResponse.data;

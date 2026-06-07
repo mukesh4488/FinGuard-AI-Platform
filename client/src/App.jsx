@@ -39,7 +39,13 @@ export default function App() {
     e.preventDefault(); setLoading(true); setTxResult(null);
     try {
       const res = await axios.post(`${API_BASE_URL}/transaction`, { ...txForm, amount: Number(txForm.amount), location: Number(txForm.location), merchantType: Number(txForm.merchantType), hour: Number(txForm.hour) });
-      setTxResult(res.data.data); fetchHistory();
+      
+      const newData = res.data.data;
+      setTxResult(newData); 
+      
+      // Injecting the data directly into React's memory for the chart
+      setTransactions(prevTransactions => [newData, ...prevTransactions]);
+      
     } catch (err) { alert("API Error"); } finally { setLoading(false); }
   };
 
@@ -47,7 +53,13 @@ export default function App() {
     e.preventDefault(); setLoading(true); setLoanResult(null);
     try {
       const res = await axios.post(`${API_BASE_URL}/loan`, { ...loanForm, annualIncome: Number(loanForm.annualIncome), creditScore: Number(loanForm.creditScore), loanAmount: Number(loanForm.loanAmount), debtToIncomeRatio: Number(loanForm.debtToIncomeRatio) });
-      setLoanResult(res.data.data); fetchHistory();
+      
+      const newData = res.data.data;
+      setLoanResult(newData); 
+      
+      // Injecting the data directly into React's memory for the pie chart
+      setLoans(prevLoans => [newData, ...prevLoans]);
+      
     } catch (err) { alert("API Error"); } finally { setLoading(false); }
   };
 
@@ -64,7 +76,7 @@ export default function App() {
   const COLORS = [theme.success, theme.danger];
 
   const chartData = transactions.slice(0, 15).reverse().map((t, i) => ({
-    name: `Tx ${i+1}`, amount: t.amount, risk: t.fraudScore * 100
+    name: `Tx ${i+1}`, amount: t.amount, risk: t.fraudScore ? t.fraudScore * 100 : 0
   }));
 
   const pageVariants = {

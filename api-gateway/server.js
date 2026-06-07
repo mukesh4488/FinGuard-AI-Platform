@@ -10,8 +10,16 @@ const PORT = process.env.PORT || 5000;
 const Transaction = require('./models/Transaction');
 const Loan = require('./models/Loan');
 
-// Middleware - allows the server to accept JSON data and handle requests from React
-app.use(cors());
+// ==========================================
+// UPDATED CORS MIDDLEWARE
+// ==========================================
+// This explicitly tells the cloud firewall to let your React frontend in
+app.use(cors({
+    origin: '*', 
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 // Connect to MongoDB
